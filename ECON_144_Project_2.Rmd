@@ -1,0 +1,351 @@
+---
+title: "ECON_144_Project_2"
+author: "Marc Luzuriaga, Sia Gao, Reagan Lee, Jiaxuan Huang"
+date: "2024-11-10"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(quantmod)
+library(readxl)
+library(tsibble)
+library(tidyr)
+library(ggplot2)
+library(USgas)
+library(ymd)
+library(hash)
+library(fpp3)
+library(readr)
+library(lubridate)
+library(quantmod)
+library(e1071)
+library(moments)
+library(lmtest)
+library(tseries)
+library(forecast)
+library(fpp2)
+```
+
+# ECON 144 Project 2
+
+# Introduction (Marc)
+
+In this paper, we aim to develop a comprehensive analysis of two interconnected financial and economic time series: the gas price index and the stock price of Chevron Corporation. Our objectives are twofold: (1) to create robust forecasting models for both the gas price index and Chevron's stock price that incorporate trend, seasonality, and cyclical components, and (2) to evaluate the dynamic relationship between these two variables using Vector Autoregressive (VAR) models, Vector Moving Average (VMA) models, and Granger causality tests.
+
+To achieve these goals, we will first fit individual time-series models for each variable and assess their respective trends, seasonal patterns, and cyclical behaviors over a time horizon of approximately 10 years to capture long-term movements. These models will be used to produce 12-step-ahead forecasts and compared with benchmarks such as the `auto.arima()` model to determine forecasting accuracy, measured by Mean Absolute Percentage Error (MAPE).
+
+In addition, we will assess the interactions between the gas price index and Chevron stock prices by constructing a VAR model. This will allow us to analyze how shocks to one variable impact the other over time, which will be further examined through impulse response functions. Finally, Granger causality tests will be performed to determine the directional causality between the two series, providing insights into potential leading and lagging relationships between the gas price index and Chevron stock performance.
+
+# Results
+
+## (a) Time-Series Plot of Data (Marc)
+
+Let us load the data for both the gas price index and chevron stock price as follows:
+
+```{r}
+# Define start date for the past decade (approximate 10 years ago)
+start_date <- Sys.Date() - (10 * 52 * 7)  # Approximate 10 years in weeks
+# Load the gas price index from the last ten years
+getSymbols("GASREGW", src = "FRED", periodicity = "weekly", from = start_date)
+gas_price_index <- na.omit(GASREGW)
+# Load the Chevron stock price from the last ten years
+getSymbols("CVX", src = "yahoo", periodicity = "weekly", from = start_date)
+cvx_price  <- na.omit(Cl(CVX))
+```
+
+We will proceed to plot the gas price index data, along with the respective ACF and PACF plots as follows:
+
+```{r}
+# Plot the gas price index
+plot(gas_price_index, 
+     col = "blue", 
+     main = "Gas Price Index (Last 10 Years)", 
+     xlab = "Date", 
+     ylab = "Gas Price Index")
+# Plot the associated ACFs and PACFs of gas price index
+tsdisplay(gas_price_index, main="Gas Price Index (Last 10 Years)")
+```
+
+Analyzing the respective ACF and PACF plots, we see that there is a slow decay in the ACF and two statistically significant spikes in the first and second lag. Hence, this suggests to us that we need to fit an AR(2) model.
+
+We will proceed to plot the Chevron price, along with the respective ACF and PACF plots as follows:
+
+```{r}
+# Plot the Chevron (CVX) price
+plot(cvx_price, 
+     col = "green", 
+     main = "Chevron (CVX) Closing Prices (Last 10 Years)", 
+     xlab = "Date", 
+     ylab = "CVX Closing Price")
+# Plot the associated ACFs and PACFs of CVX
+tsdisplay(cvx_price, main="Chevron (CVX) Closing Prices (Last 10 Years)")
+```
+
+Analyzing the respective ACF and PACF plots, we see that there is a slow decay in the ACF and a single statistically significant spike in the first lag. Hence, this suggests to us that we need to fit an AR(1) model.
+
+## (b) STL Decomposition (Marc)
+
+We will proceed to perform an additive STL Decomposition for the gas price index as follows:
+
+```{r}
+#Create the associated ts object
+gas_price_index_ts<- ts(gas_price_index$GASREGW, 
+                              start = c(2014, 47), frequency = 52)
+gas_price_index_decomp <- decompose(gas_price_index_ts)
+plot(gas_price_index_decomp)
+```
+
+From the data above, we see a stable trend from 2014 to 2020. However, after that time period, there is an increase trend from 2020 to 2024. Also, we see an approximately yearly regular seasonal pattern from the seasonal plot above. If we observe the random component, we see that there are cycles that are still present in the residuals. We will have to take into account these cycles in our final model.
+
+We will proceed to perform an additive STL decomposition for the Chevron stock price as follows:
+
+```{r}
+#Create the associated ts object
+cvx_price_ts<- ts(cvx_price, 
+                    start = c(2014, 47), frequency = 52)
+cvx_price_decomp <- decompose(cvx_price_ts)
+plot(cvx_price_decomp)
+```
+
+If we analyze the trend from the plot above, we see a similar trend to that of the gas price index—to which there is stability in the price from 2014 to 2020 and a clear upward trend from 2020 to 2024. As for the seasonal patterns, we see a periodicity of approximately a year, which is similar to that of the gas price index. However, the seasonal pattern is much more volatile and unstable compared to that of the gas price index. Finally, analyzing the random component, we see there are still cycles present in the residuals of our data.
+
+## (c) Model fit of Trend, Seasonality, and Cyclical Components (Marc)
+
+We will propose the following model for the trend and seasonality of the gas price index: $$
+Gas_t=T_t+T_t^2+\sum_{i=1}^{52}\gamma_iM_{i,t}+R_t
+$$Let us first fit a model with a quadratic trend and weekly seasonal dummies using the tslm() function as follows:
+
+```{r}
+#Create the fit model object
+fit_gas <- tslm(gas_price_index_ts ~ trend+ I(trend^2)+season)
+#Plot the original data
+plot(gas_price_index_ts, 
+     main = "Gas Price Index with Quadratic Trend and Seasonality", 
+     ylab = "Gas Price Index", 
+     xlab = "Time")
+#Plot the fitted model
+lines(fitted(fit_gas), col="red")
+#Create the legend
+legend("topleft", 
+       legend = c("Original Series", "Fitted Trend & Seasonality"), 
+       col = c("black", "red"), 
+       lty = 1, 
+       cex = 0.8)
+```
+
+We can further analyze the seasonal dummies of our model by plotting the seasonal factors plot:
+
+```{r}
+# Create the seasonal plot object
+fit_seasonal_gas <- tslm(gas_price_index_ts~season)
+# Obtain the associated coefficients
+seasonal_coefficients_gas <- coef(fit_seasonal_gas)[-1]
+# Plot the associated coefficients
+plot(seasonal_coefficients_gas, type = "o", 
+     main="Seasonal Factors Plot For Gas Price Index",
+     xlab="Season",
+     ylab="Price Index")
+#Summary of the coefficients
+summary(fit_seasonal_gas)
+```
+
+From the seasonal factors plot, we see that the price index increases from the beginning of the year to approximately around week 23. Then, it decreases from week 23 to the end of the year. If we analyze the summary of the fit, we see that seasonality is indeed present from examining the non-statistically significant p-values.
+
+Now, let us examine the remainder component from the fitted model as follows, as well as examine the ACF and PACF of the remainder:
+
+```{r}
+#Create the remainder object
+gas_price_index_remainder <- gas_price_index_ts-fitted(fit_gas)
+#Plot the remainder object
+plot(gas_price_index_remainder, main="Gas Price Index Remainder")
+#Examine the ACF and PACF of the remainder
+tsdisplay(gas_price_index_remainder, lag.max=40, main="Gas Price Index Remainder")
+```
+
+From the model above, we see a slow decay in the ACF, as well as two statistically significant spikes in the first two lags of the PACF. Hence, we propose to fit an AR(2) model to the residuals as follows: $$
+R_t=\phi_1R_{t-1}+\phi_2R_{t-2}+\epsilon_t
+$$
+
+Let us make this fit using the arima() function as follows:
+
+```{r}
+#Create the AR(2) object on hte gas price index remainder
+resid_gas <- arima(gas_price_index_remainder, order=c(2,0,0))
+#Plot the remainder
+plot(gas_price_index_remainder, main="Gas Price Index Remainder", 
+     ylab="Gas Price Index")
+lines(fitted(resid_gas), col="Red")
+legend("topleft", 
+       legend = c("Original Series", "Fitted AR Model"), 
+       col = c("black", "red"), 
+       lty = 1, 
+       cex = 0.8)
+```
+
+By visually inspecting the plot above, we see that the AR model does a pretty good job of fitting the data. We will proceed to plot the full model as follows:
+
+```{r}
+#Create the full model object
+full_model_gas <- fitted(fit_gas) + fitted(resid_gas)
+#Plot the remainder object
+plot(gas_price_index_ts, main="Gas Price Index")
+lines(full_model_gas, col="Red")
+legend("topleft", 
+       legend = c("Original Series", "Full Fitted Model"), 
+       col = c("black", "red"), 
+       lty = 1, 
+       cex = 0.8)
+```
+
+We will propose the following model for the trend and seasonality of the Chevron stock as follows: $$
+CVX_t=T_t+T_t^2+\sum_{i=1}^{52}\gamma_iM_{i,t}+R_t
+$$
+
+Let us first fit a model with a quadratic trend and weekly seasonal dummies using the tslm() function as follows:
+
+```{r}
+#Create the fit model object
+fit_cvx <- tslm(cvx_price_ts ~ trend+ I(trend^2)+season)
+#Plot the original data
+plot(cvx_price_ts,       
+     main = "Gas Price Index with Quadratic Trend and Seasonality",       
+     ylab = "Gas Price Index",       
+     xlab = "Time") 
+#Plot the fitted model
+lines(fitted(fit_cvx), 
+      col="red")
+#Create the legend
+legend("topleft",         
+       legend = c("Original Series", "Fitted Trend & Seasonality"),         
+       col = c("black", "red"),         
+       lty = 1,         
+       cex = 0.8)
+```
+
+We can further analyze the seasonal dummies of our model by plotting the seasonal factors plot:
+
+```{r}
+# Create the seasonal plot object
+fit_seasonal_cvx <- tslm(cvx_price_ts~season)
+# Obtain the associated coefficients
+seasonal_coefficients_cvx <- coef(fit_seasonal_cvx)[-1]
+# Plot the associated coefficients
+plot(seasonal_coefficients_cvx, type = "o", 
+     main="Seasonal Factors Plot For CVX Price",
+     xlab="Season",
+     ylab="Price Index")
+#Summary of the coefficients
+summary(fit_seasonal_cvx)
+```
+
+From the seasonal factors plot, seasonality varies throughout the year with the price index bottoming at weeks 10 and 40, while peaking at weeks 20 and 45. If we analyze the summary of the fit, we see that seasonality is indeed present from examining the non-statistically significant p-values.
+
+Now, let us examine the remainder component from the fitted model as follows, as well as examine the ACF and PACF of the remainder:
+
+```{r}
+#Create the remainder object 
+cvx_index_remainder <- cvx_price_ts-fitted(fit_cvx) 
+#Plot the remainder object 
+plot(cvx_index_remainder, main="CVX Index Remainder") 
+#Examine the ACF and PACF of the remainder 
+tsdisplay(cvx_index_remainder, lag.max=40, main="CVX Index Remainder")
+```
+
+From the model above, we see a slow decay in the ACF, as well as a single statistically significant spike in the first lag of the PACF. Hence, we propose to fit an AR(1) model to the residuals as follows: $$ R_t=\phi_1R_{t-1}+\epsilon_t $$
+
+Let us make this fit using the arima() function as follows:
+
+```{r}
+#Create the AR(1) object on the CVX remainder
+resid_cvx <- arima(cvx_index_remainder, order=c(1,0,0)) 
+#Plot the remainder 
+plot(cvx_index_remainder, main="CVX Price Remainder",       
+     ylab="Price") 
+lines(fitted(resid_cvx), col="Red") 
+legend("topleft",         
+       legend = c("Original Series", "Fitted AR Model"),         
+       col = c("black", "red"),         
+       lty = 1,         
+       cex = 0.8)
+```
+
+By visually inspecting the plot above, we see that the AR model does a pretty good job of fitting the data. We will proceed to plot the full model as follows:
+
+```{r}
+#Create the full model object
+full_model_cvx <- fitted(fit_cvx) + fitted(resid_cvx)
+#Plot the remainder object
+plot(cvx_price_ts, main="Gas Price Index")
+lines(full_model_cvx, col="Red")
+legend("topleft", 
+       legend = c("Original Series", "Full Fitted Model"), 
+       col = c("black", "red"), 
+       lty = 1, 
+       cex = 0.8)
+```
+
+## (d) Analysis of Residuals vs Fitted Values (Marc)
+
+We will proceed to plot the residuals vs fitted values for our gas price index data as follows:
+
+```{r}
+plot(full_model_gas, full_model_gas-gas_price_index_ts,
+     main="Residuals vs. Fitted Values of Gas Fit",
+     xlab="Fitted Values",
+     ylab="Residuals")
+# Add a horizontal line at 0 for reference
+abline(h = 0, col = "red", lwd = 2)
+```
+
+Analyzing the residuals vs fitted values of the gas plot, we see that the residuals are randomly distributed around 0 with no clear pattern. Although there are some outliers, the specific outliers don't hold much weight with respect to the rest of the points. Also, the spread of residuals appears to be consistent, suggesting that variance of the residuals exhibit homoscedasticity.
+
+We will proceed to plot the residuals vs fitted values for our CVX price as follows:
+
+```{r}
+plot(full_model_cvx, full_model_cvx-cvx_price_ts,
+     main="Residuals vs. Fitted Values of CVX Fit",
+     xlab="Fitted Values",
+     ylab="Residuals")
+# Add a horizontal line at 0 for reference
+abline(h = 0, col = "red", lwd = 2)
+```
+
+The residuals for the CVX fit are similar to that of the Gas fit. Analyzing the residuals vs fitted values of the gas plot, we see that the residuals are randomly distributed around 0 with no clear pattern. Also, the spread of residuals appears to be consistent, suggesting that variance of the residuals exhibit homoscedasticity.
+
+## (e) ACF and PACF of respective residuals (Reagan)
+
+## (f) CUSUM Plot (Reagan)
+
+## (g) Diagnostic Statistics (Reagan)
+
+## (h) Forecasting with Model (Reagan)
+
+## (i) Comparison to auto.arima() (Sia)
+
+## (j) Combining the Model with auto.arima() (Sia)
+
+## (k) The VAR Model (Jiaxuan)
+
+```{r}
+# Suggestion: Use the differenced data so that the VAR model is stationary, along with verifying it is stationary with the ADF test
+# Load the percentage change of the gas price index for the past decade (weekly data)
+gas_price_index_diff <- na.omit(diff(gas_price_index))
+adf_test_result_gas <- adf.test(gas_price_index_diff)
+adf_test_result_gas
+plot(gas_price_index_diff)
+tsdisplay(gas_price_index_diff)
+
+# Load the percentage change of the TAN (solar ETF) closing stock price for the past decade (weekly data)
+cvx_price_diff  <- na.omit(diff(cvx_price))
+adf_test_result_cvx  <- adf.test(cvx_price_diff)
+adf_test_result_cvx
+plot(cvx_price_diff)
+tsdisplay(cvx_price_diff)
+```
+
+## (l) Impulse Response Functions (Jiaxuan)
+
+## (m) Granger-Causality (Sia)
+
+## (n) Forecasting with VAR Model (Jiaxuan)
