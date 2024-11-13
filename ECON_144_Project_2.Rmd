@@ -315,11 +315,107 @@ The residuals for the CVX fit are similar to that of the Gas fit. Analyzing the 
 
 ## (e) ACF and PACF of respective residuals (Reagan)
 
+```{r}
+# ACF and PACF for gas price index residuals
+tsdisplay(full_model_gas - gas_price_index_ts, main="ACF and PACF of Gas Price Index Residuals")
+
+# ACF and PACF for Chevron stock price (CVX) residuals
+tsdisplay(full_model_cvx - cvx_price_ts, main="ACF and PACF of CVX Price Residuals")
+
+```
+
 ## (f) CUSUM Plot (Reagan)
+
+```{r}
+# (a) CUSUM Plot for Gas Price Index
+# Compute cumulative sum of residuals for gas price index
+gas_residuals <- full_model_gas - gas_price_index_ts  # Calculate residuals
+gas_cusum <- cumsum(gas_residuals)                    # Cumulative sum
+
+# Plot CUSUM for gas price index
+plot(gas_cusum, type = "l", col = "blue", 
+     main = "CUSUM Plot of Gas Price Index Residuals", 
+     xlab = "Time", 
+     ylab = "CUSUM of Residuals")
+abline(h = 0, col = "red", lwd = 2, lty = 2)  # Reference line at 0
+
+# (b) CUSUM Plot for CVX Price
+# Compute cumulative sum of residuals for CVX price
+cvx_residuals <- full_model_cvx - cvx_price_ts        # Calculate residuals
+cvx_cusum <- cumsum(cvx_residuals)                    # Cumulative sum
+
+# Plot CUSUM for CVX price
+plot(cvx_cusum, type = "l", col = "green", 
+     main = "CUSUM Plot of CVX Price Residuals", 
+     xlab = "Time", 
+     ylab = "CUSUM of Residuals")
+abline(h = 0, col = "red", lwd = 2, lty = 2)  # Reference line at 0
+
+```
 
 ## (g) Diagnostic Statistics (Reagan)
 
+```{r}
+# Fit an ARIMA model to the gas price data
+arima_model_gas <- auto.arima(gas_price_index_ts)
+
+plot(gas_price_index_ts)
+lines(fitted(arima_model_gas), col="red")
+
+# Display the model summary
+summary(arima_model_gas)
+
+# Function to perform diagnostic statistics on an ARIMA model
+diagnostic_stats_arima <- function(model, model_name) {
+  cat("Diagnostics for", model_name, "\n")
+  
+  # Plot residuals diagnostics
+  par(mfrow = c(2, 2))  # Set up for a 2x2 plot layout
+  plot(residuals(model), main = paste("Residuals for", model_name))
+  acf(residuals(model), main = paste("ACF of Residuals for", model_name))
+  pacf(residuals(model), main = paste("PACF of Residuals for", model_name))
+  
+  # Check for autocorrelation in residuals
+  cat("\nAutocorrelation in residuals (Ljung-Box test):\n")
+  print(Box.test(residuals(model), type = "Ljung-Box"))
+  
+  # Normality test of residuals
+  cat("\nNormality test (Shapiro-Wilk test):\n")
+  print(shapiro.test(residuals(model)))
+}
+
+# Perform diagnostics for the ARIMA model on gas price data
+diagnostic_stats_arima(arima_model_gas, "Gas Price Model")
+
+```
+
 ## (h) Forecasting with Model (Reagan)
+
+```{r}
+
+# Define the number of forecast periods (e.g., forecasting 12 months into the future)
+forecast_horizon <- 12
+
+# Forecasting with the gas price model
+gas_forecast <- forecast(full_model_gas, h = forecast_horizon)
+print("Gas Price Index Forecast:")
+print(gas_forecast)
+
+# Forecasting with the Chevron (CVX) stock price model
+cvx_forecast <- forecast(full_model_cvx, h = forecast_horizon)
+print("Chevron (CVX) Stock Price Forecast:")
+print(cvx_forecast)
+
+# Plotting the forecasts
+par(mfrow = c(2, 1))  # Set up the plot area to have two plots
+
+# Plot gas price forecast
+plot(gas_forecast, main = "Gas Price Index Forecast", ylab = "Gas Price Index", xlab = "Time")
+
+# Plot Chevron (CVX) stock price forecast
+plot(cvx_forecast, main = "Chevron (CVX) Stock Price Forecast", ylab = "CVX Stock Price", xlab = "Time")
+
+```
 
 ## (i) Comparison to auto.arima() (Sia)
 
