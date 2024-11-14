@@ -26,11 +26,12 @@ library(tseries)
 library(forecast)
 library(fpp2)
 library(vars)
+library(strucchange)
 ```
 
 # ECON 144 Project 2
 
-# Introduction (Marc)
+# Introduction
 
 In this paper, we aim to develop a comprehensive analysis of two interconnected financial and economic time series: the gas price index and the stock price of Chevron Corporation. Our objectives are twofold: (1) to create robust forecasting models for both the gas price index and Chevron's stock price that incorporate trend, seasonality, and cyclical components, and (2) to evaluate the dynamic relationship between these two variables using Vector Autoregressive (VAR) models, Vector Moving Average (VMA) models, and Granger causality tests.
 
@@ -40,7 +41,7 @@ In addition, we will assess the interactions between the gas price index and Che
 
 # Results
 
-## (a) Time-Series Plot of Data (Marc)
+## (a) Time-Series Plot of Data
 
 Let us load the data for both the gas price index and chevron stock price as follows:
 
@@ -85,7 +86,7 @@ tsdisplay(cvx_price, main="Chevron (CVX) Closing Prices (Last 10 Years)")
 
 Analyzing the respective ACF and PACF plots, we see that there is a slow decay in the ACF and a single statistically significant spike in the first lag. Hence, this suggests to us that we need to fit an AR(1) model.
 
-## (b) STL Decomposition (Marc)
+## (b) STL Decomposition
 
 We will proceed to perform an additive STL Decomposition for the gas price index as follows:
 
@@ -111,7 +112,7 @@ plot(cvx_price_decomp)
 
 If we analyze the trend from the plot above, we see a similar trend to that of the gas price index—to which there is stability in the price from 2014 to 2020 and a clear upward trend from 2020 to 2024. As for the seasonal patterns, we see a periodicity of approximately a year, which is similar to that of the gas price index. However, the seasonal pattern is much more volatile and unstable compared to that of the gas price index. Finally, analyzing the random component, we see there are still cycles present in the residuals of our data.
 
-## (c) Model fit of Trend, Seasonality, and Cyclical Components (Marc)
+## (c) Model fit of Trend, Seasonality, and Cyclical Components
 
 We will propose the following model for the trend and seasonality of the gas price index: $$
 Gas_t=T_t+T_t^2+\sum_{i=1}^{52}\gamma_iM_{i,t}+R_t
@@ -286,7 +287,7 @@ legend("topleft",
        cex = 0.8)
 ```
 
-## (d) Analysis of Residuals vs Fitted Values (Marc)
+## (d) Analysis of Residuals vs Fitted Values
 
 We will proceed to plot the residuals vs fitted values for our gas price index data as follows:
 
@@ -314,83 +315,69 @@ abline(h = 0, col = "red", lwd = 2)
 
 The residuals for the CVX fit are similar to that of the Gas fit. Analyzing the residuals vs fitted values of the gas plot, we see that the residuals are randomly distributed around 0 with no clear pattern. Also, the spread of residuals appears to be consistent, suggesting that variance of the residuals exhibit homoscedasticity.
 
-## (e) ACF and PACF of respective residuals (Reagan)
+## (e) ACF and PACF of respective residuals
+
+We will proceed to plot the ACF and PACF of the respective residuals as follows:
 
 ```{r}
 # ACF and PACF for gas price index residuals
-tsdisplay(full_model_gas - gas_price_index_ts, main="ACF and PACF of Gas Price Index Residuals")
+tsdisplay(full_model_gas - gas_price_index_ts, 
+          main="ACF and PACF of Gas Price Index Residuals")
 
 # ACF and PACF for Chevron stock price (CVX) residuals
-tsdisplay(full_model_cvx - cvx_price_ts, main="ACF and PACF of CVX Price Residuals")
+tsdisplay(full_model_cvx - cvx_price_ts, 
+          main="ACF and PACF of CVX Price Residuals")
 
 ```
 
-## (f) CUSUM Plot (Reagan)
+From the ACF and PACF of the residuals, we see that it appears that statistically significant lags appear to persist in some areas of the plot. However, it appears that there is no clear pattern to suggest that a seasonal AR model would fix the statistically significant lags. Other than the few statistically significant lags, the other parts appear to simulate white noise.
+
+## (f) CUSUM Plot
+
+We will proceed to plot the CUSUM as follows:
 
 ```{r}
-# (a) CUSUM Plot for Gas Price Index
-# Compute cumulative sum of residuals for gas price index
-gas_residuals <- full_model_gas - gas_price_index_ts  # Calculate residuals
-gas_cusum <- cumsum(gas_residuals)                    # Cumulative sum
-
-# Plot CUSUM for gas price index
-plot(gas_cusum, type = "l", col = "blue", 
-     main = "CUSUM Plot of Gas Price Index Residuals", 
-     xlab = "Time", 
-     ylab = "CUSUM of Residuals")
-abline(h = 0, col = "red", lwd = 2, lty = 2)  # Reference line at 0
+# Calculate residuals by subtracting the fitted model from the actual data
+gas_residuals <- gas_price_index_ts - full_model_gas
+gas_efp <- efp(gas_residuals ~ 1, type = "Rec-CUSUM")
+plot(gas_efp, main = "CUSUM Plot for Gas Price Index")
 
 # (b) CUSUM Plot for CVX Price
-# Compute cumulative sum of residuals for CVX price
-cvx_residuals <- full_model_cvx - cvx_price_ts        # Calculate residuals
-cvx_cusum <- cumsum(cvx_residuals)                    # Cumulative sum
-
-# Plot CUSUM for CVX price
-plot(cvx_cusum, type = "l", col = "green", 
-     main = "CUSUM Plot of CVX Price Residuals", 
-     xlab = "Time", 
-     ylab = "CUSUM of Residuals")
-abline(h = 0, col = "red", lwd = 2, lty = 2)  # Reference line at 0
-
+# Calculate residuals by subtracting the fitted model from the actual data
+cvx_residuals <- cvx_price_ts - full_model_cvx
+cvx_efp <- efp(cvx_residuals ~ 1, type = "Rec-CUSUM")
+plot(cvx_efp, main = "CUSUM Plot for CVX Price")
 ```
 
-## (g) Diagnostic Statistics (Reagan)
+From the CUSUM Plots above, we see that the residuals stay within the confidence interval bands for both models. This suggests that there are no structural breaks in our model.
+
+## (g) Diagnostic Statistics
+
+We will proceed to assess the accuracy and perform a Ljung-Box Test on the residuals of the our full gas model to assess the appropriateness of our model:
 
 ```{r}
-# Fit an ARIMA model to the gas price data
-arima_model_gas <- auto.arima(gas_price_index_ts)
-
-plot(gas_price_index_ts)
-lines(fitted(arima_model_gas), col="red")
-
-# Display the model summary
-summary(arima_model_gas)
-
-# Function to perform diagnostic statistics on an ARIMA model
-diagnostic_stats_arima <- function(model, model_name) {
-  cat("Diagnostics for", model_name, "\n")
-  
-  # Plot residuals diagnostics
-  par(mfrow = c(2, 2))  # Set up for a 2x2 plot layout
-  plot(residuals(model), main = paste("Residuals for", model_name))
-  acf(residuals(model), main = paste("ACF of Residuals for", model_name))
-  pacf(residuals(model), main = paste("PACF of Residuals for", model_name))
-  
-  # Check for autocorrelation in residuals
-  cat("\nAutocorrelation in residuals (Ljung-Box test):\n")
-  print(Box.test(residuals(model), type = "Ljung-Box"))
-  
-  # Normality test of residuals
-  cat("\nNormality test (Shapiro-Wilk test):\n")
-  print(shapiro.test(residuals(model)))
-}
-
-# Perform diagnostics for the ARIMA model on gas price data
-diagnostic_stats_arima(arima_model_gas, "Gas Price Model")
-
+#Obtain associated error statistics
+accuracy(full_model_gas, gas_price_index)
+#Use Ljung-Box to test for white noise
+Box.test(gas_residuals, type = "Ljung-Box")
 ```
 
-## (h) Forecasting with Model (Reagan)
+From the above statistics, we see that the model is a pretty good fit to our data, with RMSE of 0.04878779 and MAPE of 1.215091. Interpreting the MAPE, we see that, on average, the model's predictions are off by around 1.2%, which is quite accurate. Furthermore, from the Ljung-Box test performed above, we see that the p-value of 0.9115 is non-statistically significant. This indicates that the residuals simulate white noise, which informs us that most of the dynamics have been captured by the model.
+
+We will proceed to assess the accuracy and perform a Ljung-Box Test on the residuals of the our full gas model to assess the appropriateness of our model:
+
+```{r}
+#Obtain associated error statistics
+accuracy(full_model_cvx, cvx_price)
+#Use Ljung-Box to test for white noise
+Box.test(cvx_residuals, type = "Ljung-Box")
+```
+
+From the above statistics, we see that the model is a pretty good fit to our data, with RMSE of 4.264305 and MAPE of 2.597912. Interpreting the MAPE, we see that, on average, the model's predictions are off by around 2.6%, which is quite accurate. Furthermore, from the Ljung-Box test performed above, we see that the p-value of 0.9964 is non-statistically significant. This indicates that the residuals simulate white noise, which informs us that most of the dynamics have been captured by the model.
+
+## (h) Forecasting with Model
+
+We will proceed to perform a 12-step ahead forecast for both the gas model and cvx model as follows:
 
 ```{r}
 
@@ -407,14 +394,13 @@ cvx_forecast <- forecast(full_model_cvx, h = forecast_horizon)
 print("Chevron (CVX) Stock Price Forecast:")
 print(cvx_forecast)
 
-# Plotting the forecasts
-par(mfrow = c(2, 1))  # Set up the plot area to have two plots
-
 # Plot gas price forecast
-plot(gas_forecast, main = "Gas Price Index Forecast", ylab = "Gas Price Index", xlab = "Time")
+plot(gas_forecast, main = "Gas Price Index Forecast", 
+     ylab = "Gas Price Index", xlab = "Time")
 
 # Plot Chevron (CVX) stock price forecast
-plot(cvx_forecast, main = "Chevron (CVX) Stock Price Forecast", ylab = "CVX Stock Price", xlab = "Time")
+plot(cvx_forecast, main = "Chevron (CVX) Stock Price Forecast", 
+     ylab = "CVX Stock Price", xlab = "Time")
 
 ```
 
@@ -481,7 +467,8 @@ var_model <- VAR(data_diff, p = 2, type = "const")
 fitted_values <- fitted(var_model)
 
 # Convert actual differenced data into a time series object for plotting consistency
-actual_values <- ts(data_diff, start = start(data_diff), frequency = frequency(data_diff))
+actual_values <- ts(data_diff, start = start(data_diff), 
+                    frequency = frequency(data_diff))
 # Set up plotting area
 par(mfrow = c(2, 1))  # 2 rows, 1 column layout for plotting
 
@@ -490,14 +477,16 @@ plot(actual_values[, 1], type = "l", col = "blue", lwd = 2,
      main = "Actual vs Fitted - Gas Price Index",
      ylab = "Gas Price Index", xlab = "Time")
 plot (fitted_values[, 1],type = 'l', col = "red", lwd = 2)
-legend("topright", legend = c("Actual", "Fitted"), col = c("blue", "red"), lty = c(1, 2), lwd = 2)
+legend("topright", legend = c("Actual", "Fitted"), col = c("blue", "red"), 
+       lty = c(1, 2), lwd = 2)
 
 # Plot for the second time series (e.g., TAN closing price)
 plot(actual_values[, 2], type = "l", col = "blue", lwd = 2, 
      main = "Actual vs Fitted - CVX Closing Price",
      ylab = "TAN Closing Price", xlab = "Time")
 plot(fitted_values[, 2], type = 'l', col = "red", lwd = 2)
-legend("topright", legend = c("Actual", "Fitted"), col = c("blue", "red"), lty = c(1, 2), lwd = 2)
+legend("topright", legend = c("Actual", "Fitted"), col = c("blue", "red"), 
+       lty = c(1, 2), lwd = 2)
 
 # Reset plotting area
 par(mfrow = c(1, 1))
@@ -525,7 +514,8 @@ response_gas <- irf_result$irf[["GASREGW"]][1:10]
 lower_gas <- irf_result$Lower[["GASREGW"]][1:10]
 upper_gas <- irf_result$Upper[["GASREGW"]][1:10]
 
-plot(response_gas, type = "l", col = "blue", ylim = range(c(lower_gas, upper_gas)),
+plot(response_gas, type = "l", col = "blue", 
+     ylim = range(c(lower_gas, upper_gas)),
      ylab = "Response", xlab = "Periods", main = "IRF of GASREGW")
 lines(lower_gas, col = "red", lty = 2)
 lines(upper_gas, col = "red", lty = 2)
@@ -535,7 +525,8 @@ response_cvx <- irf_result$irf[["CVX.Close"]][1:10]
 lower_cvx <- irf_result$Lower[["CVX.Close"]][1:10]
 upper_cvx <- irf_result$Upper[["CVX.Close"]][1:10]
 
-plot(response_cvx, type = "l", col = "blue", ylim = range(c(lower_cvx, upper_cvx)),
+plot(response_cvx, type = "l", col = "blue", ylim = range(c(lower_cvx, 
+                                                            upper_cvx)),
      ylab = "Response", xlab = "Periods", main = "IRF of CVX.Close")
 lines(lower_cvx, col = "red", lty = 2)
 lines(upper_cvx, col = "red", lty = 2)
@@ -567,3 +558,9 @@ gas_forecast <- forecast_var$fcst$GASREGW
 cvx_forecast <- forecast_var$fcst$CVX.Close
 
 ```
+
+# References
+
+Federal Reserve Bank of St. Louis. (n.d.). *Weekly U.S. All Grades All Formulations Retail Gasoline Prices (GASREGW)*. FRED, Federal Reserve Bank of St. Louis. Retrieved November 14, 2024, from <https://fred.stlouisfed.org/series/GASREGW>
+
+Yahoo Finance. (n.d.). *Chevron Corporation (CVX) Stock Price, News, Quote & History*. Retrieved November 14, 2024, from <https://finance.yahoo.com/quote/CVX/>
