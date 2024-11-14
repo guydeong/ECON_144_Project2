@@ -172,7 +172,7 @@ $$
 Let us make this fit using the arima() function as follows:
 
 ```{r}
-#Create the AR(2) object on hte gas price index remainder
+#Create the AR(2) object on the gas price index remainder
 resid_gas <- arima(gas_price_index_remainder, order=c(2,0,0))
 #Plot the remainder
 plot(gas_price_index_remainder, main="Gas Price Index Remainder", 
@@ -404,39 +404,402 @@ plot(cvx_forecast, main = "Chevron (CVX) Stock Price Forecast",
 
 ```
 
-## (i) Comparison to auto.arima() (Sia)
+## (i) Comparison to auto.arima()
 
-## (j) Combining the Model with auto.arima() (Sia)
+Now, we are considering using auto.arima instead of the manual capture model, as it can help us capture the trend, seasonality, cycle, and differences in the data directly if needed.
 
-## (k) The VAR Model (Jiaxuan)
+```{r, include=T, echo = T, message = F, warning = F}
+# Applying auto.arima to gas price index time series
+auto_arima_gas <- auto.arima(gas_price_index_ts)
+summary(auto_arima_gas)
 
-From the model summary, we can find that for the regression towards gas, the lag 1 and 2 of CVX prices has a statistically high significance, as well as the log1 of gas price itself. The R-square is around 0.4. This indicates that gas price is explained reasonably well. However, none of the lagged terms are significant towards the prediction of CVX price and the R-square is around 0.003, so the model is not fitting well on CVX price, this is confirmed by our plot, where the fitted ice has similar pattern of the actual price, whereas the fitted CVX doesn't seem to have similar patterns
+# Applying auto.arima to Chevron stock price time series
+auto_arima_cvx <- auto.arima(cvx_price_ts)
+summary(auto_arima_cvx)
+```
 
-[**=======NOTES AND FEEDBACK START===========**]{.underline}
+The gas price index shows us ARIMA(1,1,0)(1,0,0)[52], which means:
 
-[Feedback 1:]{.underline}
+-   The ARIMA(1,1,0)(1,0,0)[52] model is a seasonal ARIMA model that combines both non-seasonal and seasonal components to capture patterns in the data. In the non-seasonal part, it includes an autoregressive (AR) term with p = 1, meaning it has one non-seasonal autoregressive term, and it applies first-order differencing (d=1) to make the series stationary. There is no non-seasonal moving average (MA) component, as q=0. In the seasonal part, the model includes one seasonal autoregressive term with P=1, no seasonal differencing (D=0), and no seasonal moving average component (Q=0). The seasonality period is s=52, which suggests a yearly pattern with weekly data, assuming 52 weeks per year.
 
-Can you elaborate more on the code in this section outside of the comments? It has to be clear to the reader that we're differencing in order to make the data stationary and using the adf to check if the resulting data is indeed stationary; using the VARselection to determine the order of the model; and plotting the data. The format will look something like this:
+To represent the model mathematically, we could write as follows: $$(1 - \phi_1 L)(1 - \Phi_1 L^{52})(1 - L) Y_t = \epsilon_t$$ The same analysis work for the Chevron's stock price. ARIMA(0,1,0) shows us that it just simple differencing model with no autoregressive or moving average components. As a result, the formula is more likely as follows: $$ Y_t = Y_{t-1} + \epsilon_t $$ Next, let's plot it to visually assess the fit of auto.arima models to the original data:
 
-"We will proceed to difference our data to make it stationary and perform an ADF test to statistically ensure that the data is indeed stationary:
+```{r, include=T, echo = T, message = F, warning = F}
+# Plot the fitted values for gas price index using auto.arima
+plot(gas_price_index_ts, main = "Gas Price Index with auto.arima Fit", 
+     ylab = "Gas Price Index", xlab = "Time")
+lines(fitted(auto_arima_gas), col = "red")
+legend("topleft", legend = c("Original Series", "Auto.ARIMA Fit"), 
+       col = c("black", "red"), lty = 1)
 
-[INSERT R MARKDOWN HERE]
+# Plot the fitted values for Chevron stock price using auto.arima
+plot(cvx_price_ts, main = "Chevron (CVX) Stock Price with auto.arima Fit", 
+     ylab = "CVX Stock Price", xlab = "Time")
+lines(fitted(auto_arima_cvx), col = "red")
+legend("topleft", legend = c("Original Series", "Auto.ARIMA Fit"), 
+       col = c("black", "red"), lty = 1)
+```
 
-From the ADF test we see that the . . . "
+From above, we could find that the fitted-lines for auto.arima align perfectly with the original data since it capture the trend, seasonality, cycles, and even the turning points.
 
-Essentially, what you're trying to do is explain what you're about to do, and then perform the action in an R markdown. It has to be clear to the reader what you're about to do in a sequential and logical fasion. Do the same when fitting the VAR Model and plotting the VAR Model
+After plotting out the auto.arima model, let's compare based on the fit statistically and visually:
 
-[Feedback 2:]{.underline}
+### First, comparing statistically by using accuracy():
 
-Can you fix the axis and legend. It appears that, for one of the plots, the legend covers the plot.
+```{R, include = T, echo = T, warning = F, message = F}
+# Accuracy for Gas Price Index
+accuracy_manual_gas <- accuracy(full_model_gas, gas_price_index_ts)
+accuracy_auto_arima_gas <- accuracy(fitted(auto_arima_gas), gas_price_index_ts)
+print(accuracy_manual_gas)
+print(accuracy_auto_arima_gas)
+# Accuracy for Chevron (CVX) Stock Price
+accuracy_manual_cvx <- accuracy(full_model_cvx, cvx_price_ts)
+accuracy_auto_arima_cvx <- accuracy(fitted(auto_arima_cvx), cvx_price_ts)
+print(accuracy_manual_cvx)
+print(accuracy_auto_arima_cvx)
+```
 
-[Feedback 3:]{.underline}
+After comparison statistically, we would find that the manual caputure model have a better fit than the auto.arima model. However, it doesn't mean that auto.arima must have less accuracy when doing forecast since robustness is also a really important factor.
 
-Move the interpretation of the model summary just below the call of the summary. Also, don't use R squared since it doesn't take into account the number of parameters. Interpret the fit using AIC, BIC, and Adjusted R Squared.
+### Second, comparing by using plots:
 
-[**=======NOTES AND FEEDBACK END===========**]{.underline}
+```{R, include = T, echo = T, warning = F, message = F}
+# Plot for Gas Price Index
+plot(gas_price_index_ts, main = "Gas Price Index Comparison",
+     ylab = "Gas Price Index", xlab = "Time")
+lines(fitted(fit_gas) + fitted(resid_gas), 
+      col = "blue", lty = 1)  # Manual capture model
+lines(fitted(auto_arima_gas), col = "red", lty = 1)  # auto.arima model
+legend("topleft", 
+       legend = c("Original Series", "Manual Model", "Auto.ARIMA Model"),
+       col = c("black", "blue", "red"), lty = 1, cex = 0.8)
 
-```{r}
+# Plot for CVX Stock Price
+plot(cvx_price_ts, main = "Chevron (CVX) Stock Price Comparison",
+     ylab = "CVX Stock Price", xlab = "Time")
+lines(fitted(fit_cvx) + fitted(resid_cvx), 
+      col = "blue", lty = 1)  # Manual capture model
+lines(fitted(auto_arima_cvx), col = "red", lty = 1)  # auto.arima model
+legend("topleft", 
+       legend = c("Original Series", "Manual Model", "Auto.ARIMA Model"),
+       col = c("black", "blue", "red"), lty = 1, cex = 0.8)
+```
+
+From the plots, we can observe that, compared to the manually captured models, the auto.arima models display a smoother trend. This may enhance forecasting accuracy and robustness for future out-of-sample data.
+
+So what out the performance of auto.arima forecasting? Let's check it by using plots:
+
+```{r, include=T, echo = T, message = F, warning = F}
+# forecast 12 steps ahead
+forecast_horizon <- 12
+
+# 12-Step Forecast for Gas Price Index
+auto_arima_forecast_gas <- forecast(auto_arima_gas, h = forecast_horizon)
+plot(auto_arima_forecast_gas, main = "12-Step Forecast - Gas Price Index",
+     ylab = "Gas Price Index", xlab = "Time", col = "red")
+
+# 12-Step Forecast for Chevron (CVX) Stock Price
+auto_arima_forecast_cvx <- forecast(auto_arima_cvx, h = forecast_horizon)
+plot(auto_arima_forecast_cvx, 
+     main = "12-Step Forecast - Chevron (CVX) Stock Price",
+     ylab = "CVX Stock Price", xlab = "Time", col = "red")
+```
+
+Since accuracy, robustness, consistency, etc. are all factors we need to take care of when doing forecasting, let's comparing the errors, especially MAPE for the forecast instead of the fit of original model now. In order to let it work, we would split the data into training and testing sets for a fixed 12 periods window.
+
+```{r, include=T, echo = T, message = F, warning = F}
+# Define the forecast horizon
+forecast_horizon <- 12
+
+# Calculate the training size by subtracting the forecast horizon
+train_size_gas <- length(gas_price_index_ts) - forecast_horizon
+train_size_cvx <- length(cvx_price_ts) - forecast_horizon
+
+# Define the training and testing sets for Gas Price Index
+train_data_gas <- head(gas_price_index_ts, train_size_gas)
+test_data_gas <- tail(gas_price_index_ts, forecast_horizon)
+
+# Define the training and testing sets for Chevron Stock Price (CVX)
+train_data_cvx <- head(cvx_price_ts, train_size_cvx)
+test_data_cvx <- tail(cvx_price_ts, forecast_horizon)
+
+# Fit the manual models for trend and seasonality, and residuals
+fit_gas_manual <- tslm(train_data_gas ~ trend + I(trend^2) + season)
+resid_gas_manual <- arima(residuals(fit_gas_manual), order = c(2,0,0))
+
+fit_cvx_manual <- tslm(train_data_cvx ~ trend + I(trend^2) + season)
+resid_cvx_manual <- arima(residuals(fit_cvx_manual), order = c(1,0,0))
+
+# Forecast with the manual model components separately
+manual_forecast_trend_season_gas <- forecast(fit_gas_manual, h = forecast_horizon)
+manual_forecast_residual_gas <- forecast(resid_gas_manual, h = forecast_horizon)
+
+manual_forecast_trend_season_cvx <- forecast(fit_cvx_manual, h = forecast_horizon)
+manual_forecast_residual_cvx <- forecast(resid_cvx_manual, h = forecast_horizon)
+
+# Function to combine forecast objects
+combine_forecasts <- function(forecast1, forecast2) {
+  combined_mean <- forecast1$mean + forecast2$mean
+  combined_lower <- forecast1$lower + forecast2$lower
+  combined_upper <- forecast1$upper + forecast2$upper
+  
+  combined_forecast <- forecast1
+  combined_forecast$mean <- combined_mean
+  combined_forecast$lower <- combined_lower
+  combined_forecast$upper <- combined_upper
+  
+  return(combined_forecast)
+}
+
+# Combine manual forecasts for Gas Price Index and Chevron Stock Price
+manual_forecast_gas <- combine_forecasts(manual_forecast_trend_season_gas, 
+                                         manual_forecast_residual_gas)
+manual_forecast_cvx <- combine_forecasts(manual_forecast_trend_season_cvx, 
+                                         manual_forecast_residual_cvx)
+
+# Fit auto.arima models for comparison
+auto_arima_gas <- auto.arima(train_data_gas)
+auto_arima_forecast_gas <- forecast(auto_arima_gas, h = forecast_horizon)
+
+auto_arima_cvx <- auto.arima(train_data_cvx)
+auto_arima_forecast_cvx <- forecast(auto_arima_cvx, h = forecast_horizon)
+
+# Calculate accuracy metrics
+accuracy_manual_gas <- accuracy(manual_forecast_gas, test_data_gas)
+accuracy_auto_arima_gas <- accuracy(auto_arima_forecast_gas$mean, test_data_gas)
+
+accuracy_manual_cvx <- accuracy(manual_forecast_cvx, test_data_cvx)
+accuracy_auto_arima_cvx <- accuracy(auto_arima_forecast_cvx$mean, test_data_cvx)
+
+# Print accuracy results
+#Gas Price Index - Manual Model Accuracy
+print(accuracy_manual_gas)
+
+# Gas Price Index - Auto.ARIMA Model Accuracy
+print(accuracy_auto_arima_gas)
+
+# Chevron Stock Price - Manual Model Accuracy
+print(accuracy_manual_cvx)
+
+#Chevron Stock Price - Auto.ARIMA Model Accuracy
+print(accuracy_auto_arima_cvx)
+```
+
+For the Gas Price Index, the Auto.ARIMA model has a good MAPE value of 5.33%, showing adequate forecasting accuracy. For the Chevron Stock Price, the Auto.ARIMA model outperforms the manual model slightly, with a MAPE of 3.82% versus 4.71%.
+
+This suggests that the Auto.ARIMA model is generally more accurate for forecasting both the Gas Price Index and Chevron's stock price.
+
+Based on the MAPE results above, we can confirm our hypothesis that auto.arima may be more robust for forecasting.
+
+Moreover, we can observe our forecast results by using plots:
+
+```{r, include=T, echo = T, message = F, warning = F}
+# Plotting for Gas Price Index
+plot(gas_price_index_ts, 
+     main = "Gas Price Index Forecast Comparison: Manual vs Auto.ARIMA", 
+     ylab = "Gas Price Index", xlab = "Time", col = "black", lwd = 2)
+
+# Plot Manual Model Forecast for Gas Price Index
+lines(manual_forecast_gas$mean, col = "blue", lwd = 2, lty = 1)
+lines(manual_forecast_gas$lower[,2], col = "blue", lty = 2)
+lines(manual_forecast_gas$upper[,2], col = "blue", lty = 2)
+
+# Add shaded area for Manual Model's confidence interval (95%) for Gas Price Index
+polygon(c(time(manual_forecast_gas$mean), rev(time(manual_forecast_gas$mean))), 
+        c(manual_forecast_gas$upper[,2], rev(manual_forecast_gas$lower[,2])), 
+        col = rgb(0, 0, 1, 0.2), border = NA)
+
+# Plot Auto.ARIMA Model Forecast for Gas Price Index
+lines(auto_arima_forecast_gas$mean, col = "red", lwd = 2, lty = 1)
+lines(auto_arima_forecast_gas$lower[,2], col = "red", lty = 2)
+lines(auto_arima_forecast_gas$upper[,2], col = "red", lty = 2)
+
+# Add shaded area for Auto.ARIMA Model's confidence interval (95%) for Gas Price Index
+polygon(c(time(auto_arima_forecast_gas$mean), 
+          rev(time(auto_arima_forecast_gas$mean))), 
+        c(auto_arima_forecast_gas$upper[,2], 
+          rev(auto_arima_forecast_gas$lower[,2])), 
+        col = rgb(1, 0, 0, 0.2), border = NA)
+
+# Add legend for Gas Price Index plot
+legend("topleft", 
+       legend = c("Actual Series", "Manual Model Forecast", "Auto.ARIMA Forecast"), 
+       col = c("black", "blue", "red"), lty = c(1, 1, 1), lwd = 2)
+
+# Plotting for Chevron Stock Price
+plot(cvx_price_ts, 
+     main = "Chevron (CVX) Stock Price Forecast Comparison: Manual vs Auto.ARIMA", 
+     ylab = "Chevron Stock Price", xlab = "Time", col = "black", lwd = 2)
+
+# Plot Manual Model Forecast for Chevron Stock Price
+lines(manual_forecast_cvx$mean, col = "blue", lwd = 2, lty = 1)
+lines(manual_forecast_cvx$lower[,2], col = "blue", lty = 2)
+lines(manual_forecast_cvx$upper[,2], col = "blue", lty = 2)
+
+# Add shaded area for Manual Model's confidence interval (95%) for Chevron 
+polygon(c(time(manual_forecast_cvx$mean), 
+          rev(time(manual_forecast_cvx$mean))), 
+        c(manual_forecast_cvx$upper[,2], 
+          rev(manual_forecast_cvx$lower[,2])), 
+        col = rgb(0, 0, 1, 0.2), border = NA)
+
+# Plot Auto.ARIMA Model Forecast for Chevron Stock Price
+lines(auto_arima_forecast_cvx$mean, col = "red", lwd = 2, lty = 1)
+lines(auto_arima_forecast_cvx$lower[,2], col = "red", lty = 2)
+lines(auto_arima_forecast_cvx$upper[,2], col = "red", lty = 2)
+
+# Add shaded area for Auto.ARIMA Model's confidence interval (95%) for Chevron 
+polygon(c(time(auto_arima_forecast_cvx$mean), 
+          rev(time(auto_arima_forecast_cvx$mean))), 
+        c(auto_arima_forecast_cvx$upper[,2], 
+          rev(auto_arima_forecast_cvx$lower[,2])), 
+        col = rgb(1, 0, 0, 0.2), border = NA)
+
+# Add legend for Chevron Stock Price plot
+legend("topleft", 
+       legend = c("Actual Series", "Manual Model Forecast", "Auto.ARIMA Forecast"), 
+       col = c("black", "blue", "red"), lty = c(1, 1, 1), lwd = 2)
+
+```
+
+From the plots, we can find that the actual data is in the error bonds of both kind of forecast, although the forecast accuracy are different from the MAPE we just analyzed.
+
+## (j) Combining the Model with auto.arima()
+
+After obtaining the manual capture model and the auto.arima model, we are attempting to combine them to see if this yields a better fit. To compare the forecasts from the three types of models (manual capture, auto.arima, and the combination of both), we plot them on the same graph for each variable as follows:
+
+```{r, include=T, echo = T, message = F, warning = F}
+# Extract mean forecast values from the manual forecasts
+manual_forecast_gas_values <- as.numeric(manual_forecast_gas$mean)
+manual_forecast_cvx_values <- as.numeric(manual_forecast_cvx$mean)
+
+# Combine forecasts from manual and auto.arima models by averaging them
+combined_forecast_gas <- 
+  (manual_forecast_gas_values + as.numeric(auto_arima_forecast_gas$mean)) / 2
+combined_forecast_cvx <- 
+  (manual_forecast_cvx_values + as.numeric(auto_arima_forecast_cvx$mean)) / 2
+
+# Calculate accuracy for the combined models with test data
+accuracy_combined_gas <- accuracy(ts(combined_forecast_gas, 
+                                     start = end(train_data_gas), 
+                                     frequency = frequency(gas_price_index_ts)), 
+                                  test_data_gas)
+accuracy_combined_cvx <- accuracy(ts(combined_forecast_cvx, 
+                                     start = end(train_data_cvx), 
+                                     frequency = frequency(cvx_price_ts)), 
+                                  test_data_cvx)
+
+# Print accuracy results for combined forecasts
+## Gas Price Index - Combined Model Accuracy
+print(accuracy_combined_gas)
+
+## Chevron Stock Price - Combined Model Accuracy
+print(accuracy_combined_cvx)
+
+```
+
+In the MAPE analysis from the previous section, we discovered that the auto.arima models outperformed the manually developed models, achieving MAPE values of approximately 5% and 3%, respectively. Upon combining both models, we observed an improvement in the accuracy of the Gas Price Index prediction, which decreased it's accuracy from around 5% to 7%. However, there was a slight improve in the accuracy of the Chevron stock price prediction, which changed from 4% to 3%. This may be due to the errors from the manual capture model having a greater influence on the combined model than those from the auto.arima model and the traits of the data. However, the combined ones are both better than the manual capture models.
+
+Since numbers can sometimes show us directly about the accuracy, visualization from plots can help us better understand the influences.
+
+```{r, include = T, echo = T, warning = F, message = F}
+# Prepare the combined forecast objects with approximated confidence intervals
+# For Gas Price Index
+combined_forecast_gas <- manual_forecast_gas
+combined_forecast_gas$mean <- 
+  (manual_forecast_gas$mean + auto_arima_forecast_gas$mean) / 2
+combined_forecast_gas$lower <- 
+  (manual_forecast_gas$lower + auto_arima_forecast_gas$lower) / 2
+combined_forecast_gas$upper <- 
+  (manual_forecast_gas$upper + auto_arima_forecast_gas$upper) / 2
+
+# For Chevron Stock Price
+combined_forecast_cvx <- manual_forecast_cvx
+combined_forecast_cvx$mean <- 
+  (manual_forecast_cvx$mean + auto_arima_forecast_cvx$mean) / 2
+combined_forecast_cvx$lower <- 
+  (manual_forecast_cvx$lower + auto_arima_forecast_cvx$lower) / 2
+combined_forecast_cvx$upper <- 
+  (manual_forecast_cvx$upper + auto_arima_forecast_cvx$upper) / 2
+
+# Now, we will plot all three forecasts on the same plot with error bands
+
+# --- Plotting for Gas Price Index ---
+plot(gas_price_index_ts, 
+     main = 
+       "Gas Price Index Forecast Comparison: Manual vs Auto.ARIMA vs Combined", 
+     ylab = "Gas Price Index", xlab = "Time", col = "black", lwd = 2)
+
+# Plot Manual Model Forecast
+lines(manual_forecast_gas$mean, col = "blue", lwd = 2, lty = 1)
+polygon(c(time(manual_forecast_gas$mean), rev(time(manual_forecast_gas$mean))), 
+        c(manual_forecast_gas$upper[,2], rev(manual_forecast_gas$lower[,2])), 
+        col = rgb(0, 0, 1, 0.2), border = NA)
+
+# Plot Auto.ARIMA Model Forecast
+lines(auto_arima_forecast_gas$mean, col = "red", lwd = 2, lty = 1)
+polygon(c(time(auto_arima_forecast_gas$mean), 
+          rev(time(auto_arima_forecast_gas$mean))), 
+        c(auto_arima_forecast_gas$upper[,2], 
+          rev(auto_arima_forecast_gas$lower[,2])), 
+        col = rgb(1, 0, 0, 0.2), border = NA)
+
+# Plot Combined Model Forecast
+lines(combined_forecast_gas$mean, col = "green", lwd = 2, lty = 1)
+polygon(c(time(combined_forecast_gas$mean), 
+          rev(time(combined_forecast_gas$mean))), 
+        c(combined_forecast_gas$upper[,2], 
+          rev(combined_forecast_gas$lower[,2])), 
+        col = rgb(0, 1, 0, 0.2), border = NA)
+
+# Add legend
+legend("topleft", 
+       legend = c("Actual Series", "Manual Model Forecast", 
+                  "Auto.ARIMA Forecast", "Combined Forecast"), 
+       col = c("black", "blue", "red", "green"), lty = c(1, 1, 1,1), lwd = 2)
+
+# --- Plotting for Chevron Stock Price ---
+plot(cvx_price_ts, 
+     main = 
+       "Chevron Stock Price Forecast Comparison: Manual vs Auto.ARIMA vs Combined", 
+     ylab = "Chevron Stock Price", xlab = "Time", col = "black", lwd = 2)
+
+# Plot Manual Model Forecast
+lines(manual_forecast_cvx$mean, col = "blue", lwd = 2, lty = 1)
+polygon(c(time(manual_forecast_cvx$mean), rev(time(manual_forecast_cvx$mean))), 
+        c(manual_forecast_cvx$upper[,2], rev(manual_forecast_cvx$lower[,2])), 
+        col = rgb(0, 0, 1, 0.2), border = NA)
+
+# Plot Auto.ARIMA Model Forecast
+lines(auto_arima_forecast_cvx$mean, col = "red", lwd = 2, lty = 1)
+polygon(c(time(auto_arima_forecast_cvx$mean), 
+          rev(time(auto_arima_forecast_cvx$mean))), 
+        c(auto_arima_forecast_cvx$upper[,2], 
+          rev(auto_arima_forecast_cvx$lower[,2])), 
+        col = rgb(1, 0, 0, 0.2), border = NA)
+
+# Plot Combined Model Forecast
+lines(combined_forecast_cvx$mean, col = "green", lwd = 2, lty = 1)
+polygon(c(time(combined_forecast_cvx$mean),
+          rev(time(combined_forecast_cvx$mean))), 
+        c(combined_forecast_cvx$upper[,2], 
+          rev(combined_forecast_cvx$lower[,2])), 
+        col = rgb(0, 1, 0, 0.2), border = NA)
+
+# Add legend
+legend("topleft", 
+       legend = c("Actual Series", "Manual Model Forecast", 
+                  "Auto.ARIMA Forecast", "Combined Forecast"), 
+       col = c("black", "blue", "red", "green"), lty = c(1, 1, 1, 1), lwd = 2)
+```
+
+From the graph, we can observe that the Gas Price Index and Chevron stock prices are becoming increasingly stationary, indicating that fluctuations have diminished since 2023. The auto.arima model forecasts with a horizontal line due to this increased stationarity. In contrast, the manual model forecast follows the existing data pattern, resulting in a forecast line with more significant changes. The combined model can provide a balanced approach to enhance forecast accuracy and robustness based on the traits of the dataset.
+
+## (k) The VAR Model
+
+In order to fit the VAR we need the time series to be stationary, with inspection, we decide to use one order of difference to further ensure stationarity. Then we verify using ADF test and ACF/PACF of differenced time series
+
+```{r, include = T, echo = T, warning = F, message = F}
 # Load the percentage change of the gas price index for the past decade (weekly data)
 gas_price_index_diff <- na.omit(diff(gas_price_index))
 adf_test_result_gas <- adf.test(gas_price_index_diff)
@@ -450,19 +813,37 @@ adf_test_result_cvx  <- adf.test(cvx_price_diff)
 adf_test_result_cvx
 plot(cvx_price_diff)
 tsdisplay(cvx_price_diff)
+```
 
+The ADF test results indicate that both gas_price_index_diff and cvx_price_diff are stationary (p-value \< 0.01). The ACF and PACF plots for gas_price_index_diff show a decaying pattern, suggesting a potential ARMA structure. Also cvx_price_diff has mostly random ACF and PACF values near zero, indicating a white noise-like process.
+
+After differencing for stationarity, we perform lag to find our optimal for the model.
+
+```{r, include = T, echo = T, warning = F, message = F}
 # Combine the two time series into one dataset
 data_diff <- cbind(gas_price_index_diff, cvx_price_diff)
 data_diff <- na.omit(data_diff)
 
 lag_selection <- VARselect(data_diff, lag.max = 10, type = "const") 
 lag_selection
-#Due to the result, there seems to be a  on controversy on choice of p, we choose 
-#p = 2 which is overall smallest
 
+```
+
+Due to the result, there seems to be a on controversy on choice of p, we choose p = 3 which is overall smallest chosen by AIC and FPE, then we fit the model with p = 3, then show model summary as well as plot the fitted vs actual time series(done in seperated chunks to ensure that model summary can be fully printed.
+
+```{r, include = T, echo = T, warning = F, message = F}
 # Fit our data to var
-var_model <- VAR(data_diff, p = 2, type = "const")
+var_model <- VAR(data_diff, p = 3, type = "const")
 
+summary(var_model)
+# Assuming var_model is your fitted VAR model
+aic_value <- AIC(var_model)
+bic_value <- BIC(var_model)
+```
+
+From the summary, the adjusted R-squared for GASREGW is 0.3967, suggesting that around 40% of its variance is explained by the model, while CVX.Close has a very low adjusted R-squared of 0.0039, indicating poor fit for that variable. Highly significant terms (at the 0.01 level) include GASREGW.L1, CVX.Close.L1, and CVX.Close.L2 in the GASREGW equation on the gas price regression, and lag3 of gas price is significant for CVX price regression. The model shows that past values of CVX.Close significantly influence GASREGW, while CVX.Close itself is not well-explained by its own or GASREGW’s past values.
+
+```{r, include = T, echo = T, warning = F, message = F}
 # Extract fitted values from the VAR model
 fitted_values <- fitted(var_model)
 
@@ -472,92 +853,165 @@ actual_values <- ts(data_diff, start = start(data_diff),
 # Set up plotting area
 par(mfrow = c(2, 1))  # 2 rows, 1 column layout for plotting
 
-# Plot for the first time series (e.g., gas price index)
+# Plot for the first time series - gas price index
 plot(actual_values[, 1], type = "l", col = "blue", lwd = 2, 
-     main = "Actual vs Fitted - Gas Price Index",
+     main = "Actual - Gas Price Index",
      ylab = "Gas Price Index", xlab = "Time")
-plot (fitted_values[, 1],type = 'l', col = "red", lwd = 2)
-legend("topright", legend = c("Actual", "Fitted"), col = c("blue", "red"), 
-       lty = c(1, 2), lwd = 2)
+plot (fitted_values[, 1],type = 'l', col = "red", lwd = 2,
+      main = "Fitted - Gas Price Index",
+     ylab = "Gas Price Index", xlab = "Time")
 
-# Plot for the second time series (e.g., TAN closing price)
+# Plot for the second time series - Chevron closing price
 plot(actual_values[, 2], type = "l", col = "blue", lwd = 2, 
-     main = "Actual vs Fitted - CVX Closing Price",
-     ylab = "TAN Closing Price", xlab = "Time")
-plot(fitted_values[, 2], type = 'l', col = "red", lwd = 2)
-legend("topright", legend = c("Actual", "Fitted"), col = c("blue", "red"), 
-       lty = c(1, 2), lwd = 2)
+     main = "Actual - CVX Closing Price",
+     ylab = "Chevron Stock Price", xlab = "Time")
+plot(fitted_values[, 2], type = 'l', col = "red", lwd = 2,
+     main = "Fitted - CVX Closing Price",
+     ylab = "Chevron Stock Price", xlab = "Time")
 
 # Reset plotting area
-par(mfrow = c(1, 1))
+par(mfrow = c(1, 1)) # change back to original
 
 ```
 
-[**[ELABORATE WHAT YOU WILL TO DO HERE]**]{.underline}
+From the plot we can see that gas price index fitted by VAR model is very close to the actual value, but the fitted CVX price by VAR does quite look like the actual time series.
 
-```{r}
-summary(var_model)
-```
+## (l) Impulse Response Functions
 
-## (l) Impulse Response Functions (Jiaxuan)
+We calculated and plotted the IRF for a VAR model to examine how shocks to GASREGW and CVX.Close affect each variable over a 10-period horizon. The process is divided into own IRFs and cross IRFs.
 
-[**[ELABORATE WHAT YOU WILL TO DO HERE]**]{.underline}
-
-```{r}
+```{r, include = T, echo = T, warning = F, message = F}
 # Compute impulse response functions for 10 periods ahead
 irf_result <- irf(var_model, n.ahead = 10)
-# Display the IRF results
-irf_result
 
-# Plot impulse response for "GASREGW"
-response_gas <- irf_result$irf[["GASREGW"]][1:10]
-lower_gas <- irf_result$Lower[["GASREGW"]][1:10]
-upper_gas <- irf_result$Upper[["GASREGW"]][1:10]
 
-plot(response_gas, type = "l", col = "blue", 
+# ---------------- Own IRFs ---------------- #
+# Plot impulse response for GASREGW to its own shock
+response_gas <- irf_result$irf[["GASREGW"]][, "GASREGW"]
+lower_gas <- irf_result$Lower[["GASREGW"]][, "GASREGW"]
+upper_gas <- irf_result$Upper[["GASREGW"]][, "GASREGW"]
+
+plot(response_gas, type = "l", col = "blue",
      ylim = range(c(lower_gas, upper_gas)),
-     ylab = "Response", xlab = "Periods", main = "IRF of GASREGW")
+     ylab = "Response", xlab = "Periods", main = "IRF of GASREGW to its own shock")
 lines(lower_gas, col = "red", lty = 2)
 lines(upper_gas, col = "red", lty = 2)
 
-# Plot impulse response for "CVX.Close"
-response_cvx <- irf_result$irf[["CVX.Close"]][1:10]
-lower_cvx <- irf_result$Lower[["CVX.Close"]][1:10]
-upper_cvx <- irf_result$Upper[["CVX.Close"]][1:10]
+# Plot impulse response for CVX.Close to its own shock
+response_cvx <- irf_result$irf[["CVX.Close"]][, "CVX.Close"]
+lower_cvx <- irf_result$Lower[["CVX.Close"]][, "CVX.Close"]
+upper_cvx <- irf_result$Upper[["CVX.Close"]][, "CVX.Close"]
 
-plot(response_cvx, type = "l", col = "blue", ylim = range(c(lower_cvx, 
-                                                            upper_cvx)),
-     ylab = "Response", xlab = "Periods", main = "IRF of CVX.Close")
+plot(response_cvx, type = "l", col = "blue",
+     ylim = range(c(lower_cvx, upper_cvx)),
+     ylab = "Response", xlab = "Periods", main = "IRF of CVX.Close to its own shock")
 lines(lower_cvx, col = "red", lty = 2)
 lines(upper_cvx, col = "red", lty = 2)
 
-```
+# ---------------- Cross IRFs ---------------- #
+# Plot impulse response of GASREGW to a shock in CVX.Close
+response_gas_to_cvx <- irf_result$irf[["CVX.Close"]][, "GASREGW"]
+lower_gas_to_cvx <- irf_result$Lower[["CVX.Close"]][, "GASREGW"]
+upper_gas_to_cvx <- irf_result$Upper[["CVX.Close"]][, "GASREGW"]
 
-[**[ELABORATE WHAT YOU DID HERE]**]{.underline}
+plot(response_gas_to_cvx, type = "l", col = "blue",
+     ylim = range(c(lower_gas_to_cvx, upper_gas_to_cvx)),
+     ylab = "Response", xlab = "Periods", main = "IRF of GASREGW to a shock in CVX.Close")
+lines(lower_gas_to_cvx, col = "red", lty = 2)
+lines(upper_gas_to_cvx, col = "red", lty = 2)
 
-## (m) Granger-Causality (Sia)
+# Plot impulse response of CVX.Close to a shock in GASREGW
+response_cvx_to_gas <- irf_result$irf[["GASREGW"]][, "CVX.Close"]
+lower_cvx_to_gas <- irf_result$Lower[["GASREGW"]][, "CVX.Close"]
+upper_cvx_to_gas <- irf_result$Upper[["GASREGW"]][, "CVX.Close"]
 
-## (n) Forecasting with VAR Model (Jiaxuan)
-
-[**=======NOTES AND FEEDBACK START===========**]{.underline}
-
-It's difficult to see the actual forecast. Can you include the original plot? Then, can you also create another plot with the window narrowed to the recent 20 data points so it is easier to see what is happening?
-
-[**=======NOTES AND FEEDBACK END===========**]{.underline}
-
-We can see that the model predicts both gas price and CVX price as a series almost the same as the last true value observed, unlike the gas price predicted by ARIMA which has a downward trend.
-
-```{r}
-# Generate a 12-step-ahead forecast with error bands
-forecast_var <- predict(var_model, n.ahead = 12, ci = 0.95)
-# Plot the forecast with error bands
-plot(forecast_var,type = 'l',lwd = 2)
-
-# Extract the forecast values for GASREGW and CVX.Close
-gas_forecast <- forecast_var$fcst$GASREGW
-cvx_forecast <- forecast_var$fcst$CVX.Close
+plot(response_cvx_to_gas, type = "l", col = "blue",
+     ylim = range(c(lower_cvx_to_gas, upper_cvx_to_gas)),
+     ylab = "Response", xlab = "Periods", main = "IRF of CVX.Close to a shock in GASREGW")
+lines(lower_cvx_to_gas, col = "red", lty = 2)
+lines(upper_cvx_to_gas, col = "red", lty = 2)
 
 ```
+
+The impulse response functions (IRFs) show distinct behaviors for each variable's response to shocks. GASREGW's own shock has quick spike that decays gradually, which is a strong but short self-response. CVX.Close's own shock also exhibits an immediate high response, declining to near-zero within a few periods. For cross-responses, GASREGW has a modest and temporary increase in response to a shock in CVX.Close, which shows that CVX has a limited but positive impact on GASREGW. IN comparison, CVX.Close shows a slight and mostly negative response to a shock in GASREGW, with the impact oscillating briefly before decay to 0 , which indicates a weak and inconsistent influence. These patterns imply limited interdependence, with both variables mainly responding to their own shocks.
+
+## (m) Granger-Causality
+
+Based on the observations from VAR model and the selection of best fitted lags, we are going to test for the granger causality between Chevron and gas price index as follows:
+
+```{r, include = T, echo = T, warning = F, message = F}
+# Granger causality test for CVX.Close causing GASREGW
+granger_test_gas <- grangertest(GASREGW ~ CVX.Close, order = 3, data = data_diff)
+print(granger_test_gas)
+
+# Granger causality test for GASREGW causing CVX.Close
+granger_test_cvx <- grangertest(CVX.Close ~ GASREGW, order = 3, data = data_diff)
+print(granger_test_cvx)
+```
+
+Based on the results from the Granger causality test, we found that the p-value for the first model, which examines whether Chevron stock prices influence the gas price index, is significant. Therefore, we can reject the null hypothesis and conclude that Chevron stock prices do indeed cause changes in the gas price index. In contrast, the p-value for the second Granger causality test is not significant, leading us to conclude that there is no causal relationship in the direction of gas price index influencing Chevron’s stock prices.
+
+## (n) Forecasting with VAR Model
+
+We forecasts the VAR model for GASREGW and CVX.Closes price difference, and then combines them into a data frame, and uses ggplot2 to plot the historical data, forecasted values, and confidence bands for each series.
+
+```{r, include = T, echo = T, warning = F, message = F}
+# Forecast the VAR model
+forecast_horizon <- 12  # Define the number of steps ahead to forecast
+var_forecast <- predict(var_model, n.ahead = forecast_horizon, ci = 0.95)
+
+plot(var_forecast)
+# Extract forecast values for each variable
+gas_forecast <- var_forecast$fcst$GASREGW
+cvx_forecast <- var_forecast$fcst$CVX.Close
+
+# Create a combined data frame for plotting
+forecast_time <- seq(length(data_diff[, "GASREGW"]) + 1, 
+                     length(data_diff[, "GASREGW"]) + forecast_horizon)
+plot_data <- data.frame(
+  Time = forecast_time,
+  GASREGW_fcst = gas_forecast[, "fcst"],
+  GASREGW_lower = gas_forecast[, "lower"],
+  GASREGW_upper = gas_forecast[, "upper"],
+  CVX_fcst = cvx_forecast[, "fcst"],
+  CVX_lower = cvx_forecast[, "lower"],
+  CVX_upper = cvx_forecast[, "upper"]
+)
+
+# Plot the forecasts
+library(ggplot2)
+ggplot() +
+  geom_line(data = as.data.frame(data_diff), 
+            aes(x = 1:nrow(data_diff), y = GASREGW), color = "black") +
+  geom_line(data = plot_data, aes(x = Time, y = GASREGW_fcst), color = "blue") +
+  geom_ribbon(data = plot_data, 
+              aes(x = Time, ymin = GASREGW_lower, ymax = GASREGW_upper), 
+              fill = "blue", alpha = 0.2) +
+  labs(title = "Gas Price Index Difference Forecast", 
+       y = "Gas Price Index", x = "Time") +
+  theme_minimal()
+
+# Similar plot can be created for CVX.Close
+ggplot() +
+  geom_line(data = as.data.frame(data_diff), 
+            aes(x = 1:nrow(data_diff), y = CVX.Close), color = "black") +
+  geom_line(data = plot_data, aes(x = Time, y = CVX_fcst), color = "red") +
+  geom_ribbon(data = plot_data, 
+              aes(x = Time, ymin = CVX_lower, ymax = CVX_upper), 
+              fill = "red", alpha = 0.2) +
+  labs(title = "Chevron (CVX) Stock Price Difference Forecast", 
+       y = "CVX Stock Price", x = "Time") +
+  theme_minimal()
+
+```
+
+From this difference forecaster, We can see that the model predicts both gas price and CVX price difference to almost 0 in each prediction, this means that the VAR model predicts that all values should be almost the same as the last observed true value, In contrast, the ARIMA model predicts a downward and then slightly upward trend for gas price, and a CVX price ocilating around the last true observation.
+
+# Conclusion and Future Work
+
+In this study, we examined the dynamic relationship between the gas price index and Chevron’s stock price using advanced time-series models, including manual ARIMA and auto.ARIMA models, Vector Autoregressive (VAR) models, and Granger causality tests. Our findings indicate that Chevron’s stock price can significantly influence the gas price index, while the reverse is not true. The auto.ARIMA model demonstrated superior forecasting accuracy for both time series, suggesting it is more effective at capturing trends in future out-of-sample data. Furthermore, combining the manual and auto.ARIMA models improved the accuracy of forecasting Chevron’s stock price, highlighting the potential benefits of hybrid modeling approaches for financial forecasting for some specific dataset.
+
+Future research could enhance this analysis by incorporating additional external variables that influence gas prices and stock performance, such as global oil prices, geopolitical events, and macroeconomic indicators. Additionally, exploring alternative modeling frameworks, such as machine learning techniques for time series analysis, could improve forecasting accuracy. Testing these models on other energy-related stocks or indices might also provide broader insights into the dynamics of the energy sector and reveal patterns that are applicable across various sectors of the economy. Furthermore, this paper only utilizes a fixed window test. To strengthen the model, it will be important to conduct rolling window or recursive backtesting after adding more variables to ensure robustness.
 
 # References
 
