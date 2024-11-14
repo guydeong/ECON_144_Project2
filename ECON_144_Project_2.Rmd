@@ -25,6 +25,7 @@ library(lmtest)
 library(tseries)
 library(forecast)
 library(fpp2)
+library(vars)
 ```
 
 # ECON 144 Project 2
@@ -393,7 +394,7 @@ diagnostic_stats_arima(arima_model_gas, "Gas Price Model")
 
 ```{r}
 
-# Define the number of forecast periods (e.g., forecasting 12 months into the future)
+# Define the number of forecast periods
 forecast_horizon <- 12
 
 # Forecasting with the gas price model
@@ -423,8 +424,33 @@ plot(cvx_forecast, main = "Chevron (CVX) Stock Price Forecast", ylab = "CVX Stoc
 
 ## (k) The VAR Model (Jiaxuan)
 
+From the model summary, we can find that for the regression towards gas, the lag 1 and 2 of CVX prices has a statistically high significance, as well as the log1 of gas price itself. The R-square is around 0.4. This indicates that gas price is explained reasonably well. However, none of the lagged terms are significant towards the prediction of CVX price and the R-square is around 0.003, so the model is not fitting well on CVX price, this is confirmed by our plot, where the fitted ice has similar pattern of the actual price, whereas the fitted CVX doesn't seem to have similar patterns
+
+[**=======NOTES AND FEEDBACK START===========**]{.underline}
+
+[Feedback 1:]{.underline}
+
+Can you elaborate more on the code in this section outside of the comments? It has to be clear to the reader that we're differencing in order to make the data stationary and using the adf to check if the resulting data is indeed stationary; using the VARselection to determine the order of the model; and plotting the data. The format will look something like this:
+
+"We will proceed to difference our data to make it stationary and perform an ADF test to statistically ensure that the data is indeed stationary:
+
+[INSERT R MARKDOWN HERE]
+
+From the ADF test we see that the . . . "
+
+Essentially, what you're trying to do is explain what you're about to do, and then perform the action in an R markdown. It has to be clear to the reader what you're about to do in a sequential and logical fasion. Do the same when fitting the VAR Model and plotting the VAR Model
+
+[Feedback 2:]{.underline}
+
+Can you fix the axis and legend. It appears that, for one of the plots, the legend covers the plot.
+
+[Feedback 3:]{.underline}
+
+Move the interpretation of the model summary just below the call of the summary. Also, don't use R squared since it doesn't take into account the number of parameters. Interpret the fit using AIC, BIC, and Adjusted R Squared.
+
+[**=======NOTES AND FEEDBACK END===========**]{.underline}
+
 ```{r}
-# Suggestion: Use the differenced data so that the VAR model is stationary, along with verifying it is stationary with the ADF test
 # Load the percentage change of the gas price index for the past decade (weekly data)
 gas_price_index_diff <- na.omit(diff(gas_price_index))
 adf_test_result_gas <- adf.test(gas_price_index_diff)
@@ -438,10 +464,106 @@ adf_test_result_cvx  <- adf.test(cvx_price_diff)
 adf_test_result_cvx
 plot(cvx_price_diff)
 tsdisplay(cvx_price_diff)
+
+# Combine the two time series into one dataset
+data_diff <- cbind(gas_price_index_diff, cvx_price_diff)
+data_diff <- na.omit(data_diff)
+
+lag_selection <- VARselect(data_diff, lag.max = 10, type = "const") 
+lag_selection
+#Due to the result, there seems to be a  on controversy on choice of p, we choose 
+#p = 2 which is overall smallest
+
+# Fit our data to var
+var_model <- VAR(data_diff, p = 2, type = "const")
+
+# Extract fitted values from the VAR model
+fitted_values <- fitted(var_model)
+
+# Convert actual differenced data into a time series object for plotting consistency
+actual_values <- ts(data_diff, start = start(data_diff), frequency = frequency(data_diff))
+# Set up plotting area
+par(mfrow = c(2, 1))  # 2 rows, 1 column layout for plotting
+
+# Plot for the first time series (e.g., gas price index)
+plot(actual_values[, 1], type = "l", col = "blue", lwd = 2, 
+     main = "Actual vs Fitted - Gas Price Index",
+     ylab = "Gas Price Index", xlab = "Time")
+plot (fitted_values[, 1],type = 'l', col = "red", lwd = 2)
+legend("topright", legend = c("Actual", "Fitted"), col = c("blue", "red"), lty = c(1, 2), lwd = 2)
+
+# Plot for the second time series (e.g., TAN closing price)
+plot(actual_values[, 2], type = "l", col = "blue", lwd = 2, 
+     main = "Actual vs Fitted - CVX Closing Price",
+     ylab = "TAN Closing Price", xlab = "Time")
+plot(fitted_values[, 2], type = 'l', col = "red", lwd = 2)
+legend("topright", legend = c("Actual", "Fitted"), col = c("blue", "red"), lty = c(1, 2), lwd = 2)
+
+# Reset plotting area
+par(mfrow = c(1, 1))
+
+```
+
+[**[ELABORATE WHAT YOU WILL TO DO HERE]**]{.underline}
+
+```{r}
+summary(var_model)
 ```
 
 ## (l) Impulse Response Functions (Jiaxuan)
 
+[**[ELABORATE WHAT YOU WILL TO DO HERE]**]{.underline}
+
+```{r}
+# Compute impulse response functions for 10 periods ahead
+irf_result <- irf(var_model, n.ahead = 10)
+# Display the IRF results
+irf_result
+
+# Plot impulse response for "GASREGW"
+response_gas <- irf_result$irf[["GASREGW"]][1:10]
+lower_gas <- irf_result$Lower[["GASREGW"]][1:10]
+upper_gas <- irf_result$Upper[["GASREGW"]][1:10]
+
+plot(response_gas, type = "l", col = "blue", ylim = range(c(lower_gas, upper_gas)),
+     ylab = "Response", xlab = "Periods", main = "IRF of GASREGW")
+lines(lower_gas, col = "red", lty = 2)
+lines(upper_gas, col = "red", lty = 2)
+
+# Plot impulse response for "CVX.Close"
+response_cvx <- irf_result$irf[["CVX.Close"]][1:10]
+lower_cvx <- irf_result$Lower[["CVX.Close"]][1:10]
+upper_cvx <- irf_result$Upper[["CVX.Close"]][1:10]
+
+plot(response_cvx, type = "l", col = "blue", ylim = range(c(lower_cvx, upper_cvx)),
+     ylab = "Response", xlab = "Periods", main = "IRF of CVX.Close")
+lines(lower_cvx, col = "red", lty = 2)
+lines(upper_cvx, col = "red", lty = 2)
+
+```
+
+[**[ELABORATE WHAT YOU DID HERE]**]{.underline}
+
 ## (m) Granger-Causality (Sia)
 
 ## (n) Forecasting with VAR Model (Jiaxuan)
+
+[**=======NOTES AND FEEDBACK START===========**]{.underline}
+
+It's difficult to see the actual forecast. Can you include the original plot? Then, can you also create another plot with the window narrowed to the recent 20 data points so it is easier to see what is happening?
+
+[**=======NOTES AND FEEDBACK END===========**]{.underline}
+
+We can see that the model predicts both gas price and CVX price as a series almost the same as the last true value observed, unlike the gas price predicted by ARIMA which has a downward trend.
+
+```{r}
+# Generate a 12-step-ahead forecast with error bands
+forecast_var <- predict(var_model, n.ahead = 12, ci = 0.95)
+# Plot the forecast with error bands
+plot(forecast_var,type = 'l',lwd = 2)
+
+# Extract the forecast values for GASREGW and CVX.Close
+gas_forecast <- forecast_var$fcst$GASREGW
+cvx_forecast <- forecast_var$fcst$CVX.Close
+
+```
